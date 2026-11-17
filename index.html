@@ -3,6 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Content-Security-Policy: the script hash must be updated whenever the inline script changes (python snippet in security-audit/run-2) -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'sha256-bv/7tCmljm4D8mVFomgqPFWUp3UzpK+PMthlrJmUYaU=' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src https://dvekbcbxotitvokjsatv.supabase.co; frame-src https://challenges.cloudflare.com; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta name="referrer" content="strict-origin-when-cross-origin">
 <title>Receipts waitlist</title>
 <meta name="description" content="Scan a grocery barcode to see what's really in it, and count a meal's calories from one photo. Join the waitlist for 10% off Receipts Pro at launch.">
 <meta property="og:title" content="Receipts · Coming to iPhone">
@@ -136,6 +139,22 @@ document.getElementById("today").textContent =
   new Date().toLocaleDateString("en-US", { weekday: "short", day: "numeric", month: "short" }).toUpperCase();
 
 const form = document.getElementById("form"), button = document.getElementById("join"), error = document.getElementById("error");
+
+// Cloudflare Turnstile, a CAPTCHA that's usually invisible. Paste the site key from Cloudflare (Turnstile ->
+// add site -> getreceipts.github.io) and set the TURNSTILE_SECRET secret on the waitlist function. Empty = off.
+const TURNSTILE_SITE_KEY = "";
+if (TURNSTILE_SITE_KEY) {
+  const widget = document.createElement("div");
+  widget.className = "cf-turnstile";
+  widget.dataset.sitekey = TURNSTILE_SITE_KEY;
+  widget.dataset.size = "flexible";
+  widget.dataset.appearance = "interaction-only";
+  form.insertBefore(widget, button);
+  const script = document.createElement("script");
+  script.src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
+  script.async = true;
+  document.head.appendChild(script);
+}
 // ?ref=tiktok on links from posts, so you can see which channel brings sign-ups
 const source = new URLSearchParams(location.search).get("ref");
 
@@ -147,13 +166,15 @@ form.addEventListener("submit", async (event) => {
   button.disabled = true; button.textContent = "Printing…";
   try {
     const res = await fetch(ENDPOINT, { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, source, website: form.website.value }) });
+      body: JSON.stringify({ email, source, website: form.website.value,
+        turnstile: form.querySelector('[name="cf-turnstile-response"]')?.value }) });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || "Couldn't save that. Try again.");
     document.getElementById("receipt").classList.add("done");
   } catch (e) {
     error.textContent = e.message === "Failed to fetch" ? "Couldn't reach Receipts. Check your connection." : e.message;
     button.disabled = false; button.textContent = "Join the waitlist";
+    window.turnstile?.reset();
   }
 });
 </script>
